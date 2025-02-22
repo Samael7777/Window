@@ -12,8 +12,8 @@
 	<Authors>Vadim Kutin</Authors>
 	<Company>Vadim Kutin</Company>
 	<Copyright>Copyright 2025 Vadim Kutin</Copyright>
-	<PackageProjectUrl>...</PackageProjectUrl>
-	<RepositoryUrl>...</RepositoryUrl>
+	<PackageProjectUrl>https://github.com/Samael7777/Window</PackageProjectUrl>
+	<RepositoryUrl>https://github.com/Samael7777/Window</RepositoryUrl>
 	<PackageTags>WinApi;Win32;Windows;Window</PackageTags>
 	<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	 <PackageReadmeFile>README.md</PackageReadmeFile> 
@@ -21,8 +21,9 @@
 	<RepositoryType>git</RepositoryType>
 	<PackageLicenseExpression>MIT</PackageLicenseExpression>
 	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-	<Title></Title>
+	<Title>PhoenixTools.$(AssemblyName)</Title>
 	<Product>PhoenixTools.$(AssemblyName)</Product>
+	<PackageId>PhoenixTools.$(AssemblyName)</PackageId>
   </PropertyGroup>
 
 <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

@@ -12,8 +12,7 @@ internal static class ErrorHelper
         FORMAT_MESSAGE_OPTIONS.FORMAT_MESSAGE_FROM_SYSTEM |
         FORMAT_MESSAGE_OPTIONS.FORMAT_MESSAGE_IGNORE_INSERTS;
 
-    /// <exception cref="Win32Exception"></exception>
-    public static unsafe void ThrowLastErrorException()
+    public static unsafe Win32Exception GetLastWin32Exception()
     {
         Span<char> buffer = stackalloc char[512];
 
@@ -21,6 +20,6 @@ internal static class ErrorHelper
         var len = (int)WinApi.FormatMessage(Flags, (void*)0, (uint)error, 0, buffer, 0, null);
         var message = new string(buffer[..len]);
 
-        throw new Win32Exception(error, message);
+        return new Win32Exception(error, message);
     }
 }

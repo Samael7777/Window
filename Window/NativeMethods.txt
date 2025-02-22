@@ -11,5 +11,4 @@ PostMessage
 PostQuitMessage
 DestroyWindow
 RegisterWindowMessage
-GetLastError
 FormatMessage

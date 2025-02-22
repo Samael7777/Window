@@ -49,11 +49,12 @@ public sealed class SimpleWindow : IDisposable
         _windowClass = BuildWindowClass(_windowClassName);
         var classHandle = WinApi.RegisterClassEx(_windowClass);
         if (classHandle == 0)
-            ErrorHelper.ThrowLastErrorException();
+            throw ErrorHelper.GetLastWin32Exception();
 
         _captureTask = StartCaptureTask(wndName, isMessageOnly);
+
         if (_captureWndHandle.IsNull)
-            ErrorHelper.ThrowLastErrorException();
+            throw ErrorHelper.GetLastWin32Exception();
     }
     
     [MemberNotNull(nameof(_captureWndHandle))]
@@ -68,7 +69,7 @@ public sealed class SimpleWindow : IDisposable
         task.Start();
 
         waitInitEvent.Wait();
-        
+
         return task;
     }
     
@@ -107,9 +108,6 @@ public sealed class SimpleWindow : IDisposable
     {
         ThreadId = (int)WinApi.GetCurrentThreadId();
         _captureWndHandle = CreateWindow(_windowClassName, _windowClass, windowName, isMessageOnly);
-        if (_captureWndHandle == HWND.Null)
-            ErrorHelper.ThrowLastErrorException();
-
         _wndProcDelegate += WndProc;
 
         initEvent.Set(); //Capture window created. Unlock methods.
