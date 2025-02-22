@@ -1,0 +1,15 @@
+﻿GetModuleHandle
+GetCurrentThreadId
+CreateWindowEx
+RegisterClassEx
+UnregisterClass
+TranslateMessage
+DispatchMessage
+DefWindowProc
+GetMessage
+PostMessage
+PostQuitMessage
+DestroyWindow
+RegisterWindowMessage
+GetLastError
+FormatMessage

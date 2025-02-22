@@ -1,0 +1,78 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>AnyCPU;x86;x64</Platforms>
+    <RootNamespace>PhoenixTools.$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
+  </PropertyGroup>
+
+<PropertyGroup>
+	<Authors>Vadim Kutin</Authors>
+	<Company>Vadim Kutin</Company>
+	<Copyright>Copyright 2025 Vadim Kutin</Copyright>
+	<PackageProjectUrl>...</PackageProjectUrl>
+	<RepositoryUrl>...</RepositoryUrl>
+	<PackageTags>WinApi;Win32;Windows;Window</PackageTags>
+	<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+	 <PackageReadmeFile>README.md</PackageReadmeFile> 
+	<Description>Simple WinAPI window for receiving OS messages.</Description>
+	<RepositoryType>git</RepositoryType>
+	<PackageLicenseExpression>MIT</PackageLicenseExpression>
+	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+	<Title></Title>
+	<Product>PhoenixTools.$(AssemblyName)</Product>
+  </PropertyGroup>
+
+<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+  <IsAotCompatible>True</IsAotCompatible>
+</PropertyGroup>
+
+<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
+  <IsAotCompatible>True</IsAotCompatible>
+</PropertyGroup>
+
+<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+  <IsAotCompatible>True</IsAotCompatible>
+</PropertyGroup>
+
+<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+  <IsAotCompatible>True</IsAotCompatible>
+</PropertyGroup>
+
+<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
+  <IsAotCompatible>True</IsAotCompatible>
+</PropertyGroup>
+
+<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <IsAotCompatible>True</IsAotCompatible>
+</PropertyGroup>
+
+<ItemGroup>
+  <AdditionalFiles Include="NativeMethods.json" />
+  <AdditionalFiles Include="NativeMethods.txt" />
+</ItemGroup>
+
+<ItemGroup>
+  <None Include="..\README.md">
+    <Pack>True</Pack>
+    <PackagePath>\</PackagePath>
+  </None>
+</ItemGroup>
+
+<ItemGroup>
+  <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.183">
+    <PrivateAssets>all</PrivateAssets>
+    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+  </PackageReference>
+</ItemGroup>
+
+<ItemGroup>
+  <None Update="README.md">
+    <Pack>True</Pack>
+    <PackagePath>\</PackagePath>
+  </None>
+</ItemGroup>
+
+</Project>
