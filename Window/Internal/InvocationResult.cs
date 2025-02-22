@@ -7,10 +7,20 @@ namespace PhoenixTools.Window.Internal;
 ///  Used with BeginInvoke/EndInvoke
 /// </summary>
 
-internal class InvocationResult(Delegate method, object?[]? args, bool synchronous) : IAsyncResult
+internal class InvocationResult : IAsyncResult
 {
     private readonly object _lock = new();
     private readonly ManualResetEventSlim _invocationEvent = new(false);
+
+    /// <summary>
+    ///  Used with BeginInvoke/EndInvoke
+    /// </summary>
+    public InvocationResult(Delegate method, object?[]? args, bool synchronous)
+    {
+        Method = method;
+        Args = args;
+        Synchronous = synchronous;
+    }
 
     ~InvocationResult()
     {
@@ -18,9 +28,9 @@ internal class InvocationResult(Delegate method, object?[]? args, bool synchrono
         _invocationEvent.Dispose();
     }
 
-    public Delegate Method { get; } = method;
-    public object?[]? Args { get; } = args;
-    public bool Synchronous { get; } = synchronous;
+    public Delegate Method { get; }
+    public object?[]? Args { get; }
+    public bool Synchronous { get; }
     public object? AsyncState => null;
 
     public WaitHandle AsyncWaitHandle

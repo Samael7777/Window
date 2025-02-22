@@ -1,12 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFrameworks>net6.0-windows;net8.0-windows</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Platforms>AnyCPU;x86;x64</Platforms>
     <RootNamespace>PhoenixTools.$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
   </PropertyGroup>
+
+	<PropertyGroup>
+		<IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0-windows'))">true</IsAotCompatible>
+	</PropertyGroup>
 
 <PropertyGroup>
 	<Authors>Vadim Kutin</Authors>
@@ -24,31 +28,12 @@
 	<Title>PhoenixTools.$(AssemblyName)</Title>
 	<Product>PhoenixTools.$(AssemblyName)</Product>
 	<PackageId>PhoenixTools.$(AssemblyName)</PackageId>
-  </PropertyGroup>
+	<Version>1.0.1</Version>
+	<PackageReleaseNotes>Add target framework NET6.0</PackageReleaseNotes>
 
-<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-  <IsAotCompatible>True</IsAotCompatible>
 </PropertyGroup>
+	
 
-<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
-  <IsAotCompatible>True</IsAotCompatible>
-</PropertyGroup>
-
-<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-  <IsAotCompatible>True</IsAotCompatible>
-</PropertyGroup>
-
-<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-  <IsAotCompatible>True</IsAotCompatible>
-</PropertyGroup>
-
-<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
-  <IsAotCompatible>True</IsAotCompatible>
-</PropertyGroup>
-
-<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-  <IsAotCompatible>True</IsAotCompatible>
-</PropertyGroup>
 
 <ItemGroup>
   <AdditionalFiles Include="NativeMethods.json" />

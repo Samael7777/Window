@@ -21,7 +21,7 @@ public sealed class SimpleWindow : IDisposable
     
     private delegate void WndProcDelegate(HWND wnd, uint message, WPARAM wParam, LPARAM lParam);
 
-    private static readonly HWND HWND_MESSAGE = (HWND)(-3);
+    private static readonly HWND HWND_MESSAGE = (HWND)(IntPtr)(-3);
     private static readonly uint InvokeActionMessage = WinApi.RegisterWindowMessage(InvokeActionMessageName);
     
     private static WndProcDelegate? _wndProcDelegate;
@@ -56,7 +56,8 @@ public sealed class SimpleWindow : IDisposable
         if (_captureWndHandle.IsNull)
             throw ErrorHelper.GetLastWin32Exception();
     }
-    
+
+    #pragma warning disable CS8774
     [MemberNotNull(nameof(_captureWndHandle))]
     private Task StartCaptureTask(string wndName, bool isMessageOnly)
     {
@@ -72,7 +73,8 @@ public sealed class SimpleWindow : IDisposable
 
         return task;
     }
-    
+    #pragma warning restore CS8774
+
     public void Invoke(Action action)
     {
         _ = InvokeInternal(action, null, true);
@@ -178,7 +180,7 @@ public sealed class SimpleWindow : IDisposable
         Invoke(() => WinApi.DestroyWindow(_captureWndHandle));
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
     private static LRESULT DefaultWndProc(HWND wnd, uint message, WPARAM wParam, LPARAM lParam)
     {
         var maskedMessage = message & 0xFFFF;
