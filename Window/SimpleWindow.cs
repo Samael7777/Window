@@ -19,7 +19,7 @@ public sealed class SimpleWindow : IDisposable
     private const string InvokeActionMessageName = "InvokeActionMessage{8FD8734C-9B9D-4866-944B-54B81B9E3D7C}";
     private const string WndNamePrefix = "PhoenixToolsWindow";
     
-    private delegate void WndProcDelegate(HWND wnd, uint message, WPARAM wParam, LPARAM lParam);
+    private delegate void WndProcDelegate(WindowsMessageEventArgs args);
 
     private static readonly HWND HWND_MESSAGE = (HWND)(IntPtr)(-3);
     private static readonly uint InvokeActionMessage = WinApi.RegisterWindowMessage(InvokeActionMessageName);
@@ -75,6 +75,7 @@ public sealed class SimpleWindow : IDisposable
     }
     #pragma warning restore CS8774
 
+    // ReSharper disable once UnusedMember.Global
     public void Invoke(Action action)
     {
         _ = InvokeInternal(action, null, true);
@@ -112,7 +113,7 @@ public sealed class SimpleWindow : IDisposable
         _captureWndHandle = CreateWindow(_windowClassName, _windowClass, windowName, isMessageOnly);
         _wndProcDelegate += WndProc;
 
-        initEvent.Set(); //Capture window created. Unlock methods.
+        initEvent.Set();
 
 		WindowCreated?.Invoke(this, EventArgs.Empty);
 
@@ -134,12 +135,6 @@ public sealed class SimpleWindow : IDisposable
         _wndProcDelegate -= WndProc;
         ThreadId = -1;
         WindowDestroyed?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void OnMessageReceived(HWND wnd, uint message, WPARAM wParam, LPARAM lParam)
-    {
-        var args = new WindowsMessageEventArgs(wnd, message, wParam, lParam);
-        MessageReceived?.Invoke(this, args);
     }
 
     private void InvokeProc()
@@ -167,12 +162,17 @@ public sealed class SimpleWindow : IDisposable
         WinApi.PostMessage((HWND)Handle, InvokeActionMessage, 0, 0);
     }
 
-    private void WndProc(HWND wnd, uint message, WPARAM wParam, LPARAM lParam)
+    private void WndProc(WindowsMessageEventArgs args)
     {
-        if (message == InvokeActionMessage)
+        if (args.Message == InvokeActionMessage)
+        {
             InvokeProc();
+            args.IsHandled = true;
+        }
         else
-            OnMessageReceived(wnd, message, wParam.Value, lParam);
+        {
+            MessageReceived?.Invoke(this, args);
+        }
     }
 
     private void CloseWindow()
@@ -181,23 +181,24 @@ public sealed class SimpleWindow : IDisposable
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
-    private static LRESULT DefaultWndProc(HWND wnd, uint message, WPARAM wParam, LPARAM lParam)
+    private static LRESULT DefaultWndProc(HWND hWnd, uint message, WPARAM wParam, LPARAM lParam)
     {
         var maskedMessage = message & 0xFFFF;
        
         Debug.WriteLine(Enum.GetName(typeof(WindowsMessage), message));
 
-        switch (maskedMessage)
+        if (maskedMessage is (uint)WindowsMessage.WM_DESTROY 
+            or (uint)WindowsMessage.WM_QUIT)
         {
-            case (uint)WindowsMessage.WM_DESTROY:
-            case (uint)WindowsMessage.WM_QUIT:
-                WinApi.PostQuitMessage(0);
-                return (LRESULT)0;
-            default:
-                _wndProcDelegate?.Invoke(wnd, message, wParam, lParam);
-                break;
+            WinApi.PostQuitMessage(0);
+            return (LRESULT)0;
         }
-        return WinApi.DefWindowProc(wnd, message, wParam, lParam);
+
+        var args = new WindowsMessageEventArgs(hWnd, message, wParam, lParam);
+        _wndProcDelegate?.Invoke(args);
+        if (args.IsHandled) return (LRESULT)1;
+
+        return WinApi.DefWindowProc(hWnd, message, wParam, lParam);
     }
     
     private static unsafe WNDCLASSEXW BuildWindowClass(string wndClassName)

@@ -28,8 +28,8 @@
 	<Title>PhoenixTools.$(AssemblyName)</Title>
 	<Product>PhoenixTools.$(AssemblyName)</Product>
 	<PackageId>PhoenixTools.$(AssemblyName)</PackageId>
-	<Version>1.0.1</Version>
-	<PackageReleaseNotes>Add target framework NET6.0</PackageReleaseNotes>
+	<Version>1.0.2</Version>
+	<PackageReleaseNotes>Add "IsHandled" to message event args</PackageReleaseNotes>
 
 </PropertyGroup>
 	
