@@ -2,11 +2,9 @@
 
 namespace PhoenixTools.Window.Internal;
 
-
 /// <summary>
 ///  Used with BeginInvoke/EndInvoke
 /// </summary>
-
 internal class InvocationResult : IAsyncResult
 {
     private readonly object _lock = new();
