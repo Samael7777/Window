@@ -1,5 +1,5 @@
-﻿using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Windows.Win32;
@@ -7,172 +7,120 @@ using Windows.Win32.Foundation;
 using Windows.Win32.UI.WindowsAndMessaging;
 using PhoenixTools.Window.Internal;
 
-// ReSharper disable InconsistentNaming
-// ReSharper disable IdentifierTypo
-
 namespace PhoenixTools.Window;
 
-//todo async execution
-
-public sealed class SimpleWindow : IDisposable
+public sealed partial class SimpleWindow : IDisposable
 {
     private const string InvokeActionMessageName = "InvokeActionMessage{8FD8734C-9B9D-4866-944B-54B81B9E3D7C}";
     private const string WndNamePrefix = "PhoenixToolsWindow";
-    
-    private delegate void WndProcDelegate(WindowsMessageEventArgs args);
+    private const string WindowClassName = "PhoenixToolsWindow_Class";
+    private const string MessageWindowClassName = "PhoenixToolsWindow_MessageOnly_Class";
+    private const int MessageWindow = -3;
 
-    private static readonly HWND HWND_MESSAGE = (HWND)(IntPtr)(-3);
-    private static readonly uint InvokeActionMessage = WinApi.RegisterWindowMessage(InvokeActionMessageName);
-    
-    private static WndProcDelegate? _wndProcDelegate;
+    private delegate int WndProcDelegate(HWND hWnd, uint message, WPARAM wParam, LPARAM lParam);
 
-    private readonly Queue<InvocationResult> _invocationQueue = new();
-    private readonly WNDCLASSEXW _windowClass;
-    private readonly string _windowClassName;
+    private static readonly object s_lock = new();
+    private static readonly ConcurrentDictionary<HWND, WndProcDelegate> s_wndProcDelegates = new();
+    private static readonly uint s_invokeActionMessage = WinApi.RegisterWindowMessage(InvokeActionMessageName);
+    private static readonly Lazy<WNDCLASSEXW> s_wndClass;
+    private static readonly Lazy<WNDCLASSEXW> s_msgOnlyWndClass;
+
+    private static int s_windowsInstancesCount;
+    private static int s_msgOnlyInstancesCount;
+
+    private readonly ConcurrentQueue<InvocationResult> _invocationQueue = new();
     private readonly Task _captureTask;
-    
+
     private HWND _captureWndHandle;
-    
-    public event EventHandler? WindowCreated;
-    public event EventHandler? WindowDestroyed;
+
+    public event EventHandler<WindowDestroyedEventArgs>? WindowDestroyed;
     public event EventHandler<WindowsMessageEventArgs>? MessageReceived;
 
     public nint Handle => _captureWndHandle;
     public int ThreadId { get; private set; }
     public string Name { get; }
+    public bool IsMessageOnly { get; }
+
+    static SimpleWindow()
+    {
+        s_wndClass = new Lazy<WNDCLASSEXW>(() => BuildWindowClass(WindowClassName));
+        s_msgOnlyWndClass = new Lazy<WNDCLASSEXW>(() => BuildWindowClass(MessageWindowClassName));
+    }
 
     public SimpleWindow(bool isMessageOnly = true)
     {
-        BuildWindowsName(isMessageOnly, out _windowClassName, out var wndName);
-        Name = wndName;
-       
-        _windowClass = BuildWindowClass(_windowClassName);
-        var classHandle = WinApi.RegisterClassEx(_windowClass);
-        if (classHandle == 0)
-            throw ErrorHelper.GetLastWin32Exception();
+        IsMessageOnly = isMessageOnly;
 
-        _captureTask = StartCaptureTask(wndName, isMessageOnly);
-
-        if (_captureWndHandle.IsNull)
-            throw ErrorHelper.GetLastWin32Exception();
+        Name = BuildWindowName();
+        RegisterWindowClass();
+        _captureTask = RunCaptureTask(Name);
+        IncrementWindowInstancesCount();
     }
 
-    #pragma warning disable CS8774
-    [MemberNotNull(nameof(_captureWndHandle))]
-    private Task StartCaptureTask(string wndName, bool isMessageOnly)
+    private Task RunCaptureTask(string windowName)
     {
-        var waitInitEvent = new ManualResetEventSlim(false);
+        using var waitInitEvent = new ManualResetEventSlim(false);
 
-        var task = new Task(()=>CaptureTask(wndName, isMessageOnly, waitInitEvent), 
+        // ReSharper disable once AccessToDisposedClosure
+        var captureTask = new Task(() => CaptureTask(windowName, waitInitEvent),
             TaskCreationOptions.LongRunning
             | TaskCreationOptions.DenyChildAttach
             | TaskCreationOptions.HideScheduler);
-        task.Start();
 
+        captureTask.Start();
         waitInitEvent.Wait();
-
-        return task;
-    }
-    #pragma warning restore CS8774
-
-    // ReSharper disable once UnusedMember.Global
-    public void Invoke(Action action)
-    {
-        _ = InvokeInternal(action, null, true);
-    }
-
-    public T? Invoke<T>(Func<T> func)
-    {
-        return (T?)InvokeInternal(func, null, true);
-    }
-
-    private object? InvokeInternal(Delegate method, object?[]? args, bool syncronus)
-    {
-        var currentThreadId = WinApi.GetCurrentThreadId();
-        if (currentThreadId == ThreadId) return method.DynamicInvoke(args);
         
-        var invocation = new InvocationResult(method, null, syncronus);
-        lock (_invocationQueue)
-        {
-            _invocationQueue.Enqueue(invocation);
-        }
-        PostInvokeMessage();
-        
-        invocation.AsyncWaitHandle.WaitOne();
-        
-        if (invocation is { IsCompleted: false, Exception: not null }) 
-            throw invocation.Exception;
-
-        return invocation.Result;
+        return captureTask;
     }
-    
-    [MemberNotNull(nameof(_captureWndHandle))]
-    private void CaptureTask(string windowName, bool isMessageOnly, ManualResetEventSlim initEvent)
+
+    private void CaptureTask(string windowName, ManualResetEventSlim initEvent)
     {
         ThreadId = (int)WinApi.GetCurrentThreadId();
-        _captureWndHandle = CreateWindow(_windowClassName, _windowClass, windowName, isMessageOnly);
-        _wndProcDelegate += WndProc;
+        var wndClassName = GetWindowClassName();
+        var wndClass = GetWindowClass();
+        _captureWndHandle = CreateWindow(wndClassName, wndClass, windowName, IsMessageOnly);
+        
+        if (_captureWndHandle.IsNull)
+            throw new Win32Exception();
+
+        s_wndProcDelegates.TryAdd(_captureWndHandle, WndProc);
 
         initEvent.Set();
 
-		WindowCreated?.Invoke(this, EventArgs.Empty);
-
-        int error;
-        while ((error = GetMessage(out var message)) != 0)
+        var isRunning = true;
+        while (isRunning)
         {
-            if (error == -1)
-            {
-                //Handle the error
+            var error = GetMessage(out var message);
 
-            }
-            else
+            switch (error)
             {
-                WinApi.TranslateMessage(in message);
-                _ = WinApi.DispatchMessage(in message);
+                case -1:
+                    //Handle the error
+                    isRunning = false;
+                    break;
+                case 0:
+                    //Close window
+                    isRunning = false;
+                    break;
+                default:
+                    WinApi.TranslateMessage(in message);
+                    _ = WinApi.DispatchMessage(in message);
+                    break;
             }
         }
 
-        _wndProcDelegate -= WndProc;
+        s_wndProcDelegates.TryRemove(_captureWndHandle, out _);
+
+        DecrementWindowInstancesCount();
+
+        var instanceCount = IsMessageOnly ? s_msgOnlyInstancesCount : s_windowsInstancesCount;
+        if (instanceCount == 0) UnregisterWindowClass();
+
+        var args = new WindowDestroyedEventArgs(Handle, ThreadId);
+        _captureWndHandle = HWND.Null;
         ThreadId = -1;
-        WindowDestroyed?.Invoke(this, EventArgs.Empty);
-    }
 
-    private void InvokeProc()
-    {
-        lock (_invocationQueue)
-        {
-            if (_invocationQueue.Count == 0) return;
-            while (_invocationQueue.TryDequeue(out var current))
-            {
-                try
-                {
-                    var result = current.Method.DynamicInvoke(current.Args);
-                    current.SetCompleted(result);
-                }
-                catch (Exception e)
-                {
-                    current.SetException(e);
-                }
-            }
-        }
-    }
-
-    private void PostInvokeMessage()
-    {
-        WinApi.PostMessage((HWND)Handle, InvokeActionMessage, 0, 0);
-    }
-
-    private void WndProc(WindowsMessageEventArgs args)
-    {
-        if (args.Message == InvokeActionMessage)
-        {
-            InvokeProc();
-            args.IsHandled = true;
-        }
-        else
-        {
-            MessageReceived?.Invoke(this, args);
-        }
+        WindowDestroyed?.Invoke(this, args);
     }
 
     private void CloseWindow()
@@ -180,27 +128,39 @@ public sealed class SimpleWindow : IDisposable
         Invoke(() => WinApi.DestroyWindow(_captureWndHandle));
     }
 
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
-    private static LRESULT DefaultWndProc(HWND hWnd, uint message, WPARAM wParam, LPARAM lParam)
+    private string BuildWindowName()
     {
-        var maskedMessage = message & 0xFFFF;
-       
-        Debug.WriteLine(Enum.GetName(typeof(WindowsMessage), message));
+        var guid = Guid.NewGuid();
+        var msgOnlyStr = IsMessageOnly ? "_MsgOnly" : "";
 
-        if (maskedMessage is (uint)WindowsMessage.WM_DESTROY 
-            or (uint)WindowsMessage.WM_QUIT)
-        {
-            WinApi.PostQuitMessage(0);
-            return (LRESULT)0;
-        }
-
-        var args = new WindowsMessageEventArgs(hWnd, message, wParam, lParam);
-        _wndProcDelegate?.Invoke(args);
-        if (args.IsHandled) return (LRESULT)1;
-
-        return WinApi.DefWindowProc(hWnd, message, wParam, lParam);
+        return $"{WndNamePrefix}{msgOnlyStr}_{guid}";
     }
-    
+
+    private void RegisterWindowClass()
+    {
+        lock (s_lock)
+        {
+            var count = IsMessageOnly ? s_msgOnlyInstancesCount : s_windowsInstancesCount;
+
+            if (count > 0) return; //Already registered
+
+            var wndClass = GetWindowClass();
+            var wndClassHandle = WinApi.RegisterClassEx(wndClass);
+            if (wndClassHandle == 0)
+                throw new Win32Exception();
+        }
+    }
+
+    private string GetWindowClassName()
+    {
+        return IsMessageOnly ? MessageWindowClassName : WindowClassName;
+    }
+
+    private WNDCLASSEXW GetWindowClass()
+    {
+        return IsMessageOnly ? s_msgOnlyWndClass.Value : s_wndClass.Value;
+    }
+
     private static unsafe WNDCLASSEXW BuildWindowClass(string wndClassName)
     {
         var currentModuleHandle = WinApi.GetModuleHandle((PCWSTR)null);
@@ -220,7 +180,8 @@ public sealed class SimpleWindow : IDisposable
         }
     }
 
-    private static unsafe HWND CreateWindow(string wndClassName, WNDCLASSEXW wndClass, string wndName, bool isMessageOnly)
+    private static unsafe HWND CreateWindow(string wndClassName, WNDCLASSEXW wndClass, string wndName,
+        bool isMessageOnly)
     {
         fixed (char* lpWndClassName = wndClassName)
         fixed (char* lpWndName = wndName)
@@ -231,26 +192,50 @@ public sealed class SimpleWindow : IDisposable
                 lpWndName,
                 0,
                 0, 0, 0, 0,
-                isMessageOnly ? HWND_MESSAGE : default,
+                isMessageOnly ? (HWND)(nint)MessageWindow : default,
                 default,
                 wndClass.hInstance,
                 null);
         }
     }
 
-    private static void BuildWindowsName(bool isMessageOnly, out string wndClassName, out string wndName)
-    {
-        var guid = Guid.NewGuid();
-        var msgOnlyStr = isMessageOnly ? "_MsgOnly" : "";
-        wndClassName = $"{WndNamePrefix}{msgOnlyStr}Cls";
-        wndName = $"{WndNamePrefix}{msgOnlyStr}_{guid}";
-    }
-
     private static int GetMessage(out MSG message)
     {
         return WinApi.GetMessage(out message, default, 0, 0);
     }
-    
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void IncrementWindowInstancesCount()
+    {
+        if (IsMessageOnly)
+            Interlocked.Increment(ref s_msgOnlyInstancesCount);
+        else
+            Interlocked.Increment(ref s_windowsInstancesCount);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void DecrementWindowInstancesCount()
+    {
+        if (IsMessageOnly)
+            Interlocked.Decrement(ref s_msgOnlyInstancesCount);
+        else
+            Interlocked.Decrement(ref s_windowsInstancesCount);
+    }
+
+    private unsafe void UnregisterWindowClass()
+    {
+        lock (s_lock)
+        {
+            var wndClassName = GetWindowClassName();
+            var wndClass = GetWindowClass();
+
+            fixed (char* lpClassName = wndClassName)
+            {
+                WinApi.UnregisterClass(lpClassName, wndClass.hInstance);
+            }
+        }
+    }
+
     #region Dispose
 
     private bool _disposed;
@@ -271,28 +256,16 @@ public sealed class SimpleWindow : IDisposable
         if (_disposed) return;
 
         if (disposing)
-        {
             //dispose managed state (managed objects)
             if (_captureWndHandle != HWND.Null)
+            {
                 CloseWindow();
-            
-            if (!_captureTask.IsCompleted) 
-                _captureTask.Wait();
-
-            UnregisterWindowClass(_windowClassName, _windowClass);
-        }
+                _captureTask.GetAwaiter().GetResult();
+            }
 
         //free unmanaged resources (unmanaged objects) and override finalizer
         //set large fields to null
         _disposed = true;
-    }
-
-    private static unsafe void UnregisterWindowClass(string className, WNDCLASSEXW classHandle)
-    {
-        fixed (char* lpClassName = className)
-        {
-            WinApi.UnregisterClass(lpClassName, classHandle.hInstance);
-        }
     }
 
     #endregion

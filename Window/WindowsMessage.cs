@@ -86,7 +86,7 @@ public enum WindowsMessage
     WM_NCACTIVATE = 0x0086,
     WM_GETDLGCODE = 0x0087,
     WM_SYNCPAINT = 0x0088,
-    
+
     WM_NCMOUSEMOVE = 0x00A0,
     WM_NCLBUTTONDOWN = 0x00A1,
     WM_NCLBUTTONUP = 0x00A2,

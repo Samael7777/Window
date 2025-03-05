@@ -32,7 +32,7 @@ public class WindowsMessageEventArgs : EventArgs
             lock (_lock)
             {
                 if (_isHandled) return;
-            
+
                 _isHandled = value;
             }
         }
