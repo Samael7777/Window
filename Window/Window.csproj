@@ -29,7 +29,7 @@
 	<Product>PhoenixTools.$(AssemblyName)</Product>
 	<PackageId>PhoenixTools.$(AssemblyName)</PackageId>
 	<Version>1.1.0</Version>
-	<PackageReleaseNotes>Add "IsHandled" to message event args</PackageReleaseNotes>
+	<PackageReleaseNotes>Reuse created window class, delete window class afrer closing all instances. Improve concurrent using of several instances of message window</PackageReleaseNotes>
 
 </PropertyGroup>
 	
